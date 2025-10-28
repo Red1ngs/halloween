@@ -1,0 +1,40 @@
+{
+    "base_url": "https://mangabuff.ru",
+    "timestamp": 0,
+    "auth_data": {
+        "email": "",
+        "password": ""
+    },
+    "headers": {
+        "common": {
+            "User-Agent": "",
+            "Accept-Language": "",
+            "Accept-Encoding": "",
+            "Sec-Ch-Ua": "",
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": ""
+        },
+        "ajax_post": {
+            "Accept": "*/*",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Origin": "https://mangabuff.ru",
+            "X-Requested-With": "XMLHttpRequest",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin"
+        },
+        "navigation_get": {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-User": "?1"
+        }
+    },
+    "cookies": {
+        "XSRF-TOKEN": "",
+        "mangabuff_session": "",
+        "__ddg9_": "",
+        "theme": "light"
+    }
+}
