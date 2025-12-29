@@ -1,8 +1,5 @@
 __pycache__/
-data/*
 *.log
 test*.py
-*.db
-*.txt
 .venv/
 .env

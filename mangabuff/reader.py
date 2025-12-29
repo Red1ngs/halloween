@@ -31,7 +31,7 @@ def process_single_batch(session: requests.Session, base_url: str, chapters_batc
     """
     url = f"{base_url}{ADD_HISTORY_PATH}"
     
-    payload = {}
+    payload: dict[str, Any] = {}
     for i, item in enumerate(chapters_batch):
         for key, value in item.items():
             payload[f"items[{i}][{key}]"] = value
