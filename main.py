@@ -7,7 +7,7 @@ from application.candy_collector import CandyCollector
 from db.manager import DBManager
 from mangabuff.register import get_valide_config
 from utils.logging import setup_logging
-from utils.network_utils import create_session
+from utils.network_utils import create_mangabuff_session
 from utils.settings import DB_URL, TARGET_CANDY_COUNT
 
 def setup_dependencies() -> tuple[DBManager, requests.Session]:
@@ -23,7 +23,7 @@ def setup_dependencies() -> tuple[DBManager, requests.Session]:
     if not config:
         raise RuntimeError("Не вдалося отримати конфігурацію.")
     
-    session = create_session(config)
+    session = create_mangabuff_session(config)
     if not session:
         raise RuntimeError("Не вдалося ініціалізувати HTTP сесію.")
         

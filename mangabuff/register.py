@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 import requests
 
 from utils.settings import CONFIG_FILE, BASE_URL, COOKIE_TTL
-from utils.network_utils import create_session, make_request
+from utils.network_utils import create_mangabuff_session, make_request
 from utils.file import load_json_data, save_json_data
 from utils.time import get_current_timestamp, has_time_elapsed
 
@@ -45,7 +45,7 @@ def extract_and_update_cookies(session: requests.Session, config: Dict[str, Any]
 
 def login_and_get_updated_config(config: Dict[str, Any], auth_data: Dict[str, str]) -> Optional[Dict[str, Any]]:
     """Оркеструє процес входу: створює сесію, виконує вхід, оновлює конфігурацію."""
-    auth_session = create_session(config, use_cookie=False)
+    auth_session = create_mangabuff_session(config, use_cookie=False)
     if not auth_session:
         return None
         
@@ -74,7 +74,6 @@ def get_auth_credentials(config: Dict[str, Any]) -> Optional[Dict[str, str]]:
         return new_auth_data
     except KeyboardInterrupt:
         logging.info("Введення скасовано. Роботу припинено.")
-        raise
     
 def get_valide_config() -> dict[str,  dict[str, Any]] | None:
     config = load_json_data(CONFIG_FILE)

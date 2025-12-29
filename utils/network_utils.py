@@ -28,7 +28,7 @@ def get_csrf_from_html(session: requests.Session) -> Optional[str]:
         return None
 
 
-def create_session(config: dict[str, dict[str, Any]], use_cookie: bool = True) -> Optional[requests.Session]:
+def create_mangabuff_session(config: dict[str, dict[str, Any]], use_cookie: bool = True) -> Optional[requests.Session]:
     """
     Створює, налаштовує сесію та отримує CSRF-токен.
 

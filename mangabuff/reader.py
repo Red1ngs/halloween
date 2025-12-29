@@ -59,8 +59,8 @@ def process_single_batch(session: requests.Session, base_url: str, chapters_batc
     candy_type = history_response.get("type")
     candies_collected = 0
     if candy_type == "pumpkin":
-        candies_collected = 3
-        logging.info(f"✅ УСПІХ! Знайдено гарбуз! +{candies_collected} цукерки.")
+        candies_collected = 1
+        logging.info(f"✅ УСПІХ! Знайдено гарбуз! +{candies_collected + 2} цукерки.")
     elif candy_type == "candy":
         candies_collected = 1
         logging.info(f"✅ УСПІХ! Взято нову цукерку. +{candies_collected} цукерка.")
