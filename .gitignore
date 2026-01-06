@@ -5,3 +5,5 @@ test*.py
 .env
 data/config*.json
 data/config_ouash.json
+*.txt
+*.db
