@@ -10,7 +10,7 @@ BASE_URL = "https://mangabuff.ru"
 COOKIE_TTL = 28_800
 ADD_HISTORY_PATH = "/addHistory?r=702"
 TAKE_CANDY_PATH = "/halloween/takeCandy"
-DELAY = 5400.0
+DELAY = 60.0
 TARGET_COUNT = 10
 SCRAPER_MANGA_PER_PAGE = 30
 BATCH_SIZE = 2
