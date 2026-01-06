@@ -12,7 +12,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 from tqdm import tqdm
 
-from utils.settings import BASE_URL
+from utils.settings import BASE_URL, PARAMS
 from utils.network_utils import make_request
 from db.manager import DBManager
 from db.manga_service import save_manga_data_incrementally, get_mangas_stats
@@ -135,7 +135,7 @@ def fetch_manga_list_page(session: requests.Session, page_num: int) -> Optional[
     url_to_scrape = f"{BASE_URL}/manga?page={page_num}"
     logging.info(f"Завантаження списку манг з: {url_to_scrape}")
     
-    main_page_html = make_request(session, 'GET', url_to_scrape, delay=0)
+    main_page_html = make_request(session, 'GET', url_to_scrape, delay=0, params=PARAMS)
     if not isinstance(main_page_html, str):
         logging.error("Не вдалося завантажити головну сторінку. Скрейпінг зупинено.")
         return None

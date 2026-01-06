@@ -3,12 +3,12 @@
 import logging
 import requests
 
-from application.candy_collector import CandyCollector
+from application.collector import ResourceCollector, CollectMode
 from db.manager import DBManager
 from mangabuff.register import get_valide_config
 from utils.logging import setup_logging
 from utils.network_utils import create_mangabuff_session
-from utils.settings import DB_URL, TARGET_CANDY_COUNT
+from utils.settings import DB_URL, TARGET_COUNT, MODE
 
 def setup_dependencies() -> tuple[DBManager, requests.Session]:
     """
@@ -38,10 +38,11 @@ def main():
     try:
         db_manager, session = setup_dependencies()
         
-        collector = CandyCollector(
+        collector = ResourceCollector(
             session=session, 
             db_manager=db_manager, 
-            target_candies=TARGET_CANDY_COUNT
+            target_amount=TARGET_COUNT,
+            mode=CollectMode(MODE)
         )
         collector.run()
 

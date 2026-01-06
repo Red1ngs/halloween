@@ -69,6 +69,7 @@ def make_request(
     url: str,
     delay: Optional[float] = None,
     data: Optional[Dict[str, Any]] = None,
+    params: Optional[Dict[str, Any]] = None,
     referer: Optional[str] = None,
     headers_profile: Optional[str] = None
 ) -> Optional[Union[str, Dict[str, Any]]]:
@@ -98,7 +99,7 @@ def make_request(
     logging.debug(f"Данні запиту: {data}")
 
     try:
-        response = session.request(method, url, headers=request_headers, data=data, timeout=15)
+        response = session.request(method, url, headers=request_headers, data=data, params=params, timeout=15)
         logging.debug(f"<-- Отримано відповідь: Статус {response.status_code}")
         response.raise_for_status()
         

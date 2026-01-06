@@ -24,10 +24,16 @@ def take_candy(session: requests.Session, base_url: str, candy_token: str) -> Op
     )
     return result if isinstance(result, dict) else None
 
-def process_single_batch(session: requests.Session, base_url: str, chapters_batch: list[dict[str, Any]]) -> int:
+def process_single_batch(
+    session: requests.Session, 
+    base_url: str, 
+    chapters_batch: list[dict[str, Any]], 
+    delay: float = 180.0  # <--- ДОДАНО АРГУМЕНТ ТУТ
+) -> Dict[str, int]:
     """
-    Обробляє одну порцію глав: відправляє історію, отримує і збирає цукерку.
-    Повертає кількість зібраних цукерок (0, 1 або 3).
+    Обробляє одну порцію глав: відправляє історію.
+    Приймає динамічний delay.
+    Повертає словник: {'candies': int, 'cards': int}
     """
     url = f"{base_url}{ADD_HISTORY_PATH}"
     
@@ -36,33 +42,44 @@ def process_single_batch(session: requests.Session, base_url: str, chapters_batc
         for key, value in item.items():
             payload[f"items[{i}][{key}]"] = value
     
+    # Виконуємо запит з переданим delay
     history_response = make_request(
         session, 
         'POST', 
         url, 
-        delay=180.0,
+        delay=delay,  # <--- ПЕРЕДАЄМО ЙОГО В ЗАПИТ
         data=payload, 
         headers_profile="ajax_post"
     )
     
+    result = {'candies': 0, 'cards': 0}
+
     if not history_response or not isinstance(history_response, dict):
         logging.error("Не отримано валідної відповіді від сервера /addHistory.")
-        return 0
+        return result
 
+    # 1. Перевірка на ЦУКЕРКУ
     candy_token = history_response.get("token")
-    if not candy_token:
-        logging.info(f"Кенді-токен не знайдено у відповіді: {history_response}")
-        return 0
-
-    take_candy(session, base_url, candy_token)
+    if candy_token:
+        # Забираємо цукерку
+        take_candy(session, base_url, candy_token)
         
-    candy_type = history_response.get("type")
-    candies_collected = 0
-    if candy_type == "pumpkin":
-        candies_collected = 1
-        logging.info(f"✅ УСПІХ! Знайдено гарбуз! +{candies_collected + 2} цукерки.")
-    elif candy_type == "candy":
-        candies_collected = 1
-        logging.info(f"✅ УСПІХ! Взято нову цукерку. +{candies_collected} цукерка.")
+        candy_type = history_response.get("type")
+        if candy_type == "pumpkin":
+            result['candies'] = 3
+            logging.info(f"✅ УСПІХ! Знайдено гарбуз! +3.")
+        else:
+            result['candies'] = 1
+            logging.info(f"✅ УСПІХ! Взято нову цукерку. +1.")
+            
+        return result
 
-    return candies_collected
+    # 2. Перевірка на КАРТКУ
+    # Перевіряємо наявність ID та Name, щоб точно знати, що це картка
+    if 'id' in history_response and 'name' in history_response:
+        card_name = history_response.get('name')
+        logging.info(f"🃏 ЗНАЙДЕНО КАРТКУ: '{card_name}' (ID: {history_response.get('id')})")
+        result['cards'] = 1
+        return result
+
+    return result
