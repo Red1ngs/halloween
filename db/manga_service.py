@@ -286,22 +286,21 @@ def get_total_mangas_count(db_manager: DBManager) -> int:
 
 def get_manga_by_order_number(db_manager: DBManager, order_num: int) -> Optional[Manga]:
     """
-    Повертає манхву за її порядковим номером (db_id), відсортовану за db_id.
+    Повертає манхву за її порядковим номером (db_id).
+    Сортування повернуто до оригінального (за ID в базі).
     """
     try:
         def _get_manga(session: Session) -> Optional[Manga]:
-            # db_id починаються з 1 (або іншого значення, залежить від Sequence), 
-            # тому order_num може прямо відповідати db_id, якщо немає видалених записів.
-            # Якщо є видалені, то потрібно шукати nth-запис.
-            
-            # Цей підхід припускає, що db_id послідовні. 
-            # Якщо db_id не є послідовними (через видалення), потрібно використовувати offset.
-            # Якщо order_num = 1, це перша манхва (db_id=1).
-            # Якщо вам потрібен N-й запис незалежно від db_id:
-            return session.query(Manga).order_by(Manga.db_id).offset(order_num - 1).limit(1).first()
+            return (
+                session.query(Manga)
+                .order_by(Manga.db_id)  # <-- ПОВЕРНУВ ЯК БУЛО (порядок додавання)
+                .offset(order_num - 1)
+                .limit(1)
+                .first()
+            )
         return db_manager.run_readonly(_get_manga)
     except Exception as e:
-        logging.error(f"Помилка отримання манхви за порядковим номером {order_num}: {e}")
+        logging.error(f"Помилка отримання манхви №{order_num}: {e}")
         return None
 
 def get_chapter_by_manga_and_offset(
@@ -311,28 +310,27 @@ def get_chapter_by_manga_and_offset(
 ) -> Optional[Chapter]:
     try:
         def _get_chapter(session: Session) -> Optional[Chapter]:
+            # Використовує get_manga_by_order_number (сортування за db_id)
             manga = get_manga_by_order_number(db_manager, manga_order_num)
             if not manga:
                 return None
             
-            # --- ВИПРАВЛЕННЯ: Додано сортування за Volume ---
-            # Тепер ми точно беремо N-у главу в логічному порядку, а не як пощастить
+            # Глави від 1 до N
             chapter = (
                 session.query(Chapter)
                 .filter_by(manga_id=manga.id)
                 .order_by(
-                    # Сортуємо NULL volume як найменші (або найбільші, залежно від логіки сайту)
                     Chapter.volume.asc().nullsfirst(), 
                     Chapter.chapter_num.asc()
                 )
-                .offset(chapter_offset - 1)
+                .offset(chapter_offset) # offset 0 = перша глава
                 .limit(1)
                 .first()
             )
             return chapter
         return db_manager.run_readonly(_get_chapter)
     except Exception as e:
-        logging.error(f"Помилка отримання глави: {e}")
+        logging.error(f"Помилка: {e}")
         return None
 
 def get_chapter_by_combined_offset(
@@ -390,47 +388,42 @@ def get_chapter_by_combined_offset(
 
 
 def get_next_chapter_offset(db_manager: DBManager, current_offset: str) -> Optional[str]:
-    """
-    Повертає наступне комбіноване зміщення у форматі "номер_манги.номер_глави".
-    Якщо поточне зміщення остання глава манхви, повертає першу главу наступної манхви.
-    Якщо це остання глава останньої манхви, повертає None.
-    """
     try:
         parts = current_offset.split('.')
-        if len(parts) != 2:
-            raise ValueError("Неправильний формат поточного зміщення. Очікується 'номер_манги.номер_глави'.")
-        
-        current_manga_order_num = int(parts[0])
-        current_chapter_offset = int(parts[1])
+        curr_manga_order = int(parts[0])
+        curr_chap_offset = int(parts[1])
 
         def _get_next(session: Session) -> Optional[str]:
-            current_manga = get_manga_by_order_number(db_manager, current_manga_order_num)
-            if not current_manga:
-                return None
+            manga = get_manga_by_order_number(db_manager, curr_manga_order)
+            if not manga: return None
             
-            # Спробувати отримати наступну главу в поточній манхві
-            next_chapter_in_manga = session.query(Chapter).filter_by(manga_id=current_manga.id).order_by(Chapter.chapter_num).offset(current_chapter_offset).limit(1).first()
+            # Наступна глава в цій манзі (порядок asc)
+            next_chap_exists = (
+                session.query(Chapter.db_id)
+                .filter_by(manga_id=manga.id)
+                .order_by(Chapter.volume.asc().nullsfirst(), Chapter.chapter_num.asc())
+                .offset(curr_chap_offset + 1)
+                .limit(1)
+                .first()
+            )
 
-            if next_chapter_in_manga:
-                return f"{current_manga_order_num}.{current_chapter_offset + 1}"
-            else:
-                # Якщо це остання глава в поточній манхві, спробувати наступну манхву
-                next_manga_order_num = current_manga_order_num + 1
-                next_manga = get_manga_by_order_number(db_manager, next_manga_order_num)
-                if next_manga:
-                    # Повернути першу главу наступної манхви
-                    first_chapter_in_next_manga = session.query(Chapter).filter_by(manga_id=next_manga.id).order_by(Chapter.chapter_num).first()
-                    if first_chapter_in_next_manga:
-                        return f"{next_manga_order_num}.1" # Перша глава
-            return None # Немає наступної глави/манхви
+            if next_chap_exists:
+                return f"{curr_manga_order}.{curr_chap_offset + 1}"
+            
+            # Наступна манга (за db_id)
+            next_manga_order = curr_manga_order + 1
+            next_manga = get_manga_by_order_number(db_manager, next_manga_order)
+            
+            if next_manga:
+                # Перша глава наступної манги
+                has_chap = session.query(Chapter).filter_by(manga_id=next_manga.id).first()
+                if has_chap:
+                    return f"{next_manga_order}.0"
+            
+            return None
 
         return db_manager.run_readonly(_get_next)
-
-    except (ValueError, IndexError) as ve:
-        logging.error(f"Помилка парсингу поточного зміщення '{current_offset}': {ve}")
-        return None
-    except Exception as e:
-        logging.error(f"Помилка отримання наступної глави за зміщенням '{current_offset}': {e}")
+    except Exception:
         return None
 
 
@@ -540,77 +533,72 @@ def save_manga_data_incrementally(
 def yield_chapters_in_batches(
     db_manager: DBManager, 
     batch_size: int,
-    # start_offset тепер краще передавати як словник або JSON рядок, 
-    # але для сумісності залишимо парсинг рядка, якщо потрібно.
-    start_offset: Optional[str] = None 
+    start_offset: Optional[str] = None
 ) -> Generator[Dict[str, Any], None, None]:
-    """
-    Генерує пачки глав, проходячись по манхвах послідовно (за їхнім ID).
-    """
     session: Optional[Session] = None
     try:
         session = db_manager.SessionLocal()
         
-        # Визначаємо, з якої манхви (db_id) починати
-        start_manga_db_id = 0
+        start_manga_order = 1
+        start_chapter_offset_in_manga = 0
+
         if start_offset:
             try:
-                # Припускаємо, що offset це просто "manga_db_id" (спрощення для надійності)
-                # Якщо у вас старий формат "1.5", беремо першу частину
-                start_manga_db_id = int(start_offset.split('.')[0])
-            except (ValueError, IndexError):
-                logging.warning(f"Невірний offset '{start_offset}', починаємо з початку.")
+                parts = start_offset.split('.')
+                if len(parts) >= 1: start_manga_order = int(parts[0])
+                if len(parts) >= 2: start_chapter_offset_in_manga = int(parts[1])
+            except ValueError:
+                pass
 
-        # Отримуємо всі ID манг, які більше або дорівнюють стартовому
-        # Це набагато ефективніше, ніж offset()
-        manga_ids_query = (
-            session.query(Manga.db_id, Manga.id)
-            .filter(Manga.db_id >= start_manga_db_id)
-            .order_by(Manga.db_id)
-            .yield_per(100) # Оптимізація пам'яті для SQL
-        )
-
-        current_batch = []
+        current_manga_order = start_manga_order
         
-        for m_db_id, m_external_id in manga_ids_query:
-            # Для кожної манхви дістаємо ВСІ глави
-            # Можна сортувати за date або db_id для стабільності скачування
-            chapters = (
-                session.query(Chapter.data_id, Chapter.manga_id)
-                .filter(Chapter.manga_id == m_external_id)
-                .order_by(Chapter.db_id) # Сортуємо за порядком додавання в БД
-                .all()
+        while True:
+            # 1. Манги беремо за db_id (старий порядок)
+            current_manga = (
+                session.query(Manga)
+                .order_by(Manga.db_id) # <-- ПОВЕРНУВ ЯК БУЛО
+                .offset(current_manga_order - 1)
+                .limit(1)
+                .first()
             )
-
-            for ch in chapters:
-                current_batch.append({
-                    "manga_id": ch.manga_id, 
-                    "chapter_id": ch.data_id
-                })
-
-                if len(current_batch) >= batch_size:
-                    # Повертаємо пачку
-                    # Offset тут буде просто db_id поточної манхви. 
-                    # Це грубий маркер, але надійніший, ніж "номер глави".
-                    yield {
-                        "items": current_batch,
-                        "last_processed_offset": str(m_db_id) 
-                    }
-                    current_batch = [] # Очищаємо пачку
             
-            # Якщо після обробки манхви залишились хвости, які не влізли в повний batch,
-            # ми їх залишимо на наступну ітерацію циклу (до наступної манхви),
-            # або можна повернути неповний батч тут, якщо це критично.
-        
-        # Повертаємо залишки
-        if current_batch:
-            yield {
-                "items": current_batch,
-                "last_processed_offset": "DONE"
-            }
+            if not current_manga:
+                break
+
+            current_chapter_offset = start_chapter_offset_in_manga if current_manga_order == start_manga_order else 0
+
+            while True:
+                # 2. Глави сортуємо нормально: Том 1, Глава 1 -> Глава 2 -> ...
+                chapters_query = (
+                    session.query(Chapter)
+                    .filter(Chapter.manga_id == current_manga.id)
+                    .order_by(
+                        Chapter.volume.asc().nullsfirst(), # Спочатку за томом (1, 2...)
+                        Chapter.chapter_num.asc()          # Потім за номером (1, 2, 3...)
+                    )
+                    .offset(current_chapter_offset)
+                    .limit(batch_size)
+                    .all()
+                )
+
+                if not chapters_query:
+                    break
+
+                yield {
+                    "items": [
+                        {"manga_id": ch.manga_id, "chapter_id": ch.data_id}
+                        for ch in chapters_query
+                    ],
+                    "last_processed_offset": f"{current_manga_order}.{current_chapter_offset + len(chapters_query)}"
+                }
+
+                current_chapter_offset += len(chapters_query)
+                if len(chapters_query) < batch_size:
+                    break
+            
+            current_manga_order += 1
             
     except Exception as e:
-        logging.error(f"Помилка в генераторі: {e}", exc_info=True)
+        logging.error(f"Error: {e}", exc_info=True)
     finally:
-        if session:
-            session.close()
+        if session: session.close()

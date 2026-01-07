@@ -1,10 +1,10 @@
-CONFIG_FILE = "data/config_ouash.json"
-LAST_READED = "data/last_readed_ouash.txt"
-LOG_FILE = "script_ouash.log"
+CONFIG_FILE = "data/config.json"
+LAST_READED = "data/last_readed.txt"
+LOG_FILE = "script.log"
 
-DB_PATH = "data/manga_ouash.db"
+DB_PATH = "data/manga.db"
 DB_URL = f"sqlite:///{DB_PATH}"
-CHAPTERS_FILE = "data/manga_ouash.json"
+CHAPTERS_FILE = "data/manga.json"
 
 BASE_URL = "https://mangabuff.ru"
 COOKIE_TTL = 28_800

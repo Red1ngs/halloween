@@ -2,65 +2,105 @@
 import json
 import logging
 import time
+import socket
+import requests.packages.urllib3.util.connection as urllib3_conn
 from typing import Any, Dict, Optional, Union
 
 import requests
 from bs4 import BeautifulSoup
 
-from utils.settings import BASE_URL
+try:
+    from .settings import BASE_URL
+except ImportError:
+    from utils.settings import BASE_URL
+
+def allowed_gai_family():
+    return socket.AF_INET
+
+urllib3_conn.allowed_gai_family = allowed_gai_family
 
 def get_csrf_from_html(session: requests.Session) -> Optional[str]:
     """
-    Виконує GET-запит на вказану URL і витягує CSRF-токен з мета-тегу.
+    Виконує GET-запит на вказану URL, перевіряє авторизацію та витягує CSRF-токен.
     """
-    logging.info(f"Намагаюся отримати CSRF-токен з головної сторінки: {BASE_URL}")
+    logging.info(f"Намагаюся отримати CSRF-токен та перевірити вхід: {BASE_URL}")
     try:
-        response = session.get(BASE_URL, timeout=15)
+        response = session.get(BASE_URL, timeout=20)
         response.raise_for_status()
+        
         soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # 1. Перевірка авторизації (чи бачить сайт нас як користувача)
+        user_div = soup.find("div", class_="menu__name")
+        if user_div:
+            user_name = user_div.get_text(strip=True)
+            logging.info(f"✅ Успішна автентифікація. Користувач: {user_name}")
+        else:
+            logging.warning("⚠️ Користувача не знайдено (виглядає як Гість). Перевірте Cookies.")
+
+        # 2. Отримання CSRF
         meta_tag = soup.find('meta', attrs={'name': 'csrf-token'})
         if meta_tag:
-            return meta_tag.get('content') 
+            return meta_tag.get('content')
+            
         logging.warning("Мета-тег 'csrf-token' не знайдено на сторінці.")
         return None
+
     except requests.exceptions.RequestException as e:
-        logging.error(f"Не вдалося завантажити сторінку для отримання токена: {e}")
+        logging.error(f"❌ Не вдалося завантажити сторінку: {e}")
         return None
 
 
-def create_mangabuff_session(config: dict[str, dict[str, Any]], use_cookie: bool = True) -> Optional[requests.Session]:
+def create_mangabuff_session(config: Dict[str, Any], use_cookie: bool = True) -> Optional[requests.Session]:
     """
-    Створює, налаштовує сесію та отримує CSRF-токен.
-
-    1. Завантажує конфігурацію.
-    2. Встановлює загальні заголовки та кукі.
-    3. Робить запит на головну сторінку, щоб отримати CSRF-токен.
-    4. Додає знайдений токен у заголовки сесії для всіх майбутніх запитів.
-
-    Returns:
-        Налаштований об'єкт сесії або None у разі невдачі.
+    Створює сесію з проксі, headers та cookies.
     """
-
     session = requests.Session()
+    session.config = config  # Зберігаємо конфіг
+    session.trust_env = False  # Ігноруємо системні проксі, використовуємо лише з конфігу
     
-    session.config = config
-    
-    headers = config.get("headers")
-    cookies = config.get("cookies")
-    
-    session.headers.update(headers.get("common", {}))
-    if use_cookie:
-        session.cookies.update(cookies)
-        
-    csrf_token = get_csrf_from_html(session)
-    if csrf_token:
-        logging.info(f"✅ CSRF-токен успішно отримано і додано до сесії.")
-        session.headers['X-CSRF-TOKEN'] = csrf_token
-    else:
-        logging.error("Не вдалося отримати CSRF-токен. POST-запити, ймовірно, не працюватимуть.")
-        return None # Можна повернути сесію, але краще позначити помилку
+    # 1. Налаштування проксі
+    proxies = config.get("proxies", {})
+    if proxies:
+        session.proxies = {
+            "http": proxies.get("http"),
+            "https": proxies.get("https")
+        }
+        logging.info(f"🌐 Проксі встановлено: {proxies.get('http')}")
 
-    return session
+    # 2. Налаштування заголовків та Cookies
+    headers = config.get("headers", {}).get("common", {})
+    session.headers.update(headers)
+    
+    if use_cookie:
+        cookies = config.get("cookies", {})
+        session.cookies.update(cookies)
+        logging.info("🍪 Cookies завантажено в сесію.")
+
+    # 3. Спроба підключення та отримання CSRF
+    try:
+        csrf_token = get_csrf_from_html(session)
+        
+        if csrf_token:
+            session.headers['X-CSRF-TOKEN'] = csrf_token
+            logging.info(f"✅ Сесія готова. CSRF отримано.")
+            return session
+        else:
+            logging.error("❌ Не вдалося отримати CSRF-токен. Сесію не створено.")
+            
+    except Exception as e:
+        logging.error(f"❌ Критична помилка при створенні сесії: {e}")
+        
+        # Блок діагностики проксі (якщо основний запит впав)
+        if proxies:
+            logging.info("🕵️ Починаю діагностику проксі...")
+            try:
+                test = session.get("https://www.google.com", timeout=10)
+                logging.info(f"Google через проксі доступний (Status: {test.status_code}). Проблема в Mangabuff або Cookies.")
+            except Exception as proxy_err:
+                logging.error(f"💀 Проксі мертвий. Google недоступний: {proxy_err}")
+
+    return None
 
 
 def make_request(
@@ -74,42 +114,47 @@ def make_request(
     headers_profile: Optional[str] = None
 ) -> Optional[Union[str, Dict[str, Any]]]:
     """
-    Виконує HTTP-запит, використовуючи профіль заголовків із сесії.
-    CSRF-токен вже має бути в сесії.
+    Універсальна функція запиту з підтримкою профілів заголовків.
     """
     if delay and delay > 0:
-        logging.info(f"Чекаємо {delay} сек. перед запитом до {url}")
+        logging.info(f"⏳ Чекаємо {delay} сек. перед запитом до {url}")
         time.sleep(delay)
 
     request_headers = session.headers.copy()
 
-    # Застосовуємо профіль заголовків
+    # Застосовуємо профіль заголовків (наприклад 'image', 'api' тощо з конфігу)
     if headers_profile:
-        profile_headers = session.config["headers"].get(headers_profile, {})
+        profile_headers = session.config.get("headers", {}).get(headers_profile, {})
         request_headers.update(profile_headers)
     
-    # Встановлюємо динамічний Referer та Origin
+    # Динамічний Referer та Origin
     if referer:
         request_headers['Referer'] = referer
-        request_headers['Origin'] = session.config.get("base_url")
+        request_headers['Origin'] = session.config.get("base_url", BASE_URL)
 
-    log_message = f"--> Надсилання {method.upper()} запиту до {url}"
+    log_message = f"--> {method.upper()} {url}"
     logging.debug(log_message)
-    logging.debug(f"Фінальні заголовки запиту: {request_headers}")
-    logging.debug(f"Данні запиту: {data}")
 
     try:
-        response = session.request(method, url, headers=request_headers, data=data, params=params, timeout=15)
-        logging.debug(f"<-- Отримано відповідь: Статус {response.status_code}")
+        response = session.request(
+            method, 
+            url, 
+            headers=request_headers, 
+            data=data, 
+            params=params, 
+            timeout=30  # Збільшено таймаут для проксі
+        )
+        
+        logging.debug(f"<-- Status: {response.status_code}")
         response.raise_for_status()
         
         if 'application/json' in response.headers.get('Content-Type', ''):
             return response.json()
         return response.text
+
     except requests.exceptions.RequestException as e:
-        logging.error(f"Помилка запиту до {url}: {e}")
+        logging.error(f"❌ Помилка запиту до {url}: {e}")
         return None
     except json.JSONDecodeError:
-        logging.error(f"Не вдалося декодувати JSON з {url}. Тіло відповіді, яке спричинило помилку:")
-        logging.error(response.text)
+        logging.error(f"❌ Помилка декодування JSON з {url}.")
         return None
