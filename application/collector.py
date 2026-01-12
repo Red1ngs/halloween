@@ -99,7 +99,7 @@ class ResourceCollector:
             # Якщо ми чекали більше 1.5 годин (5400 с) І знайшли цукерку/гарбуз
             if current_delay >= 5400 and batch_result.candies > 0:
                 logging.info("⚡️ Довге очікування принесло цукерку! Наступний запит виконуємо МИТТЄВО.")
-                current_delay = 1.0
+                current_delay = 10.0
             else:
                 current_delay = DELAY
 
