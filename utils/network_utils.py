@@ -51,7 +51,7 @@ def get_csrf_from_html(session: requests.Session, timeout: float) -> Optional[st
         return None
 
 
-def create_mangabuff_session(config: Dict[str, Any], use_cookie: bool = True) -> Optional[requests.Session]:
+def create_mangabuff_session(config: Dict[str, Any], use_cookie: bool = True, timeout: float = 20) -> Optional[requests.Session]:
     """
     Створює сесію з проксі, headers та cookies.
     """
@@ -79,7 +79,7 @@ def create_mangabuff_session(config: Dict[str, Any], use_cookie: bool = True) ->
 
     # 3. Спроба підключення та отримання CSRF
     try:
-        csrf_token = get_csrf_from_html(session)
+        csrf_token = get_csrf_from_html(session, timeout=timeout)
         
         if csrf_token:
             session.headers['X-CSRF-TOKEN'] = csrf_token
