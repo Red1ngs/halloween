@@ -19,13 +19,13 @@ def allowed_gai_family():
 
 urllib3_conn.allowed_gai_family = allowed_gai_family
 
-def get_csrf_from_html(session: requests.Session) -> Optional[str]:
+def get_csrf_from_html(session: requests.Session, timeout: float) -> Optional[str]:
     """
     Виконує GET-запит на вказану URL, перевіряє авторизацію та витягує CSRF-токен.
     """
     logging.info(f"Намагаюся отримати CSRF-токен та перевірити вхід: {BASE_URL}")
     try:
-        response = session.get(BASE_URL, timeout=20)
+        response = session.get(BASE_URL, timeout=timeout)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
